@@ -1,0 +1,11 @@
+{
+  "compilerOptions": {
+    "module": "commonjs",
+    "moduleResolution": "Node",
+    "esModuleInterop": true,
+    "strictNullChecks": true,
+    "inlineSourceMap": true,
+    "inlineSources": true,
+    "lib": ["esnext", "dom"]
+  }
+}
