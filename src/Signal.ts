@@ -10,11 +10,55 @@ type SetterHook = (
   sig: Signal<any>
 ) => void;
 
-export class Signal<T> {
+export type SignalOptions = {
+  deep?: boolean;
+  onGet?: GetterHook;
+  onSet?: SetterHook;
+};
+
+export class Signal<T = any> {
   static VALUE = Symbol("Signal.value");
 
   static proxy2raw = new WeakMap();
   static raw2proxy = new WeakMap();
+
+  static get_hooks = new Set<GetterHook>();
+  static set_hooks = new Set<SetterHook>();
+
+  /**
+   * Subscribes to changes in the signal by adding getter and setter hooks.
+   *
+   * @param {GetterHook} getter - Optional getter hook function.
+   * @param {SetterHook} setter - Optional setter hook function.
+   * @return {Function} Function to unsubscribe from the signal.
+   */
+  static subscribe({
+    getter,
+    setter,
+    once,
+  }: {
+    getter?: GetterHook;
+    setter?: SetterHook;
+    once?: boolean;
+  }) {
+    const unsubscribe = () => {
+      if (getter) this.get_hooks.delete(getter);
+      if (setter) this.set_hooks.delete(setter);
+    };
+
+    if (getter)
+      this.get_hooks.add((...args) => {
+        getter(...args);
+        if (once) unsubscribe();
+      });
+    if (setter)
+      this.set_hooks.add((...args) => {
+        setter(...args);
+        if (once) unsubscribe();
+      });
+
+    return unsubscribe;
+  }
 
   /**
    * Checks if the given object is an instance of the Signal class.
@@ -95,6 +139,8 @@ export class Signal<T> {
 
   private close = false;
 
+  _id = Math.random().toString(36).slice(2);
+
   /**
    * Constructor for creating a new Signal instance.
    *
@@ -103,11 +149,7 @@ export class Signal<T> {
    */
   constructor(
     initialValue: T,
-    private options: {
-      deep?: boolean;
-      onGet?: GetterHook;
-      onSet?: SetterHook;
-    } = {
+    private options: SignalOptions = {
       deep: true,
     }
   ) {
@@ -118,10 +160,14 @@ export class Signal<T> {
 
   private emit_get(path: HookPath) {
     this.get_hooks.forEach((hook) => hook(this[Signal.VALUE], path, this));
+    Signal.get_hooks.forEach((hook) => hook(this[Signal.VALUE], path, this));
   }
 
   private emit_set(setValue: any, path: HookPath) {
     this.set_hooks.forEach((hook) =>
+      hook(this[Signal.VALUE], setValue, path, this)
+    );
+    Signal.set_hooks.forEach((hook) =>
       hook(this[Signal.VALUE], setValue, path, this)
     );
   }
@@ -147,6 +193,9 @@ export class Signal<T> {
     if (this.close) {
       throw new Error("Signal is closed");
     }
+    if (Object.is(this[Signal.VALUE], newValue)) {
+      return;
+    }
     const path = ["value"];
     this[Signal.VALUE] = newValue;
     this.emit_set(newValue, path);
@@ -169,22 +218,32 @@ export class Signal<T> {
     once?: boolean;
   }) {
     const unsubscribe = () => {
-      if (getter) this.get_hooks.delete(getter);
-      if (setter) this.set_hooks.delete(setter);
+      if (getter) this.unsubscribe(getter);
+      if (setter) this.unsubscribe(setter);
     };
 
     if (getter)
       this.get_hooks.add((...args) => {
         getter(...args);
-        if (once) unsubscribe();
+        if (once) this.unsubscribe(getter);
       });
     if (setter)
       this.set_hooks.add((...args) => {
         setter(...args);
-        if (once) unsubscribe();
+        if (once) this.unsubscribe(setter);
       });
 
     return unsubscribe;
+  }
+
+  /**
+   * Unsubscribes from the signal by removing the provided getter or setter hook.
+   *
+   * @param {GetterHook | SetterHook} fn - The hook function to unsubscribe.
+   */
+  unsubscribe(fn: GetterHook | SetterHook) {
+    this.get_hooks.delete(fn as any);
+    this.set_hooks.delete(fn as any);
   }
 
   /**
@@ -219,6 +278,17 @@ export class Signal<T> {
         unsubscribe();
       },
     } as AsyncGenerator<T>;
+  }
+
+  /**
+   * Clean up the get and set hooks by clearing them.
+   *
+   * @param {} -
+   * @return {} -
+   */
+  cleanup() {
+    this.get_hooks.clear();
+    this.set_hooks.clear();
   }
 }
 

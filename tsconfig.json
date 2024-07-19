@@ -1,11 +1,16 @@
 {
   "compilerOptions": {
-    "module": "commonjs",
+    "module": "ESNext",
+    "target": "ESNext",
     "moduleResolution": "Node",
     "esModuleInterop": true,
     "strictNullChecks": true,
     "inlineSourceMap": true,
     "inlineSources": true,
-    "lib": ["esnext", "dom"]
+    "lib": ["esnext", "ES2015", "ES2020", "dom"],
+    "noEmit": true,
+    "declaration": false,
+    "emitDeclarationOnly": false,
+    "declarationDir": null
   }
 }
