@@ -151,16 +151,16 @@ export class EffectSignal<T> {
   private _value: T;
   private _eff: Effect;
 
+  private _context: Record<keyof any, any> = {};
+
   unsubscribe: () => void;
 
-  constructor(memoFn: () => T) {
-    this._eff = new Effect(memoFn);
-    this._value = this._eff.run();
+  constructor(
+    memoFn: (next: (data: T) => void, context: Record<keyof any, any>) => void
+  ) {
     this._sig = new Signal(this._value);
-    this.unsubscribe = this._eff.subscribe((val) => {
-      this._value = val;
-      this._sig.value = val;
-    });
+    this._eff = new Effect(() => memoFn(this.set.bind(this), this._context));
+    this._eff.run();
   }
 
   get _id() {
@@ -175,6 +175,11 @@ export class EffectSignal<T> {
     return this._sig;
   }
 
+  set(data: T) {
+    this._value = data;
+    this._sig.value = data;
+  }
+
   cleanup() {
     this._eff.cleanup();
     this._sig.cleanup();
@@ -184,7 +189,7 @@ export class EffectSignal<T> {
 
 // const main = () => {
 //   const sig1 = new Signal(1);
-//   const sig2 = new EffectSignal(() => sig1.value * 2);
+//   const sig2 = new EffectSignal((next) => next(sig1.value * 2));
 
 //   console.log(sig1._id);
 //   console.log(sig2._id);

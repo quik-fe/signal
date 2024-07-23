@@ -16,8 +16,10 @@ export type SignalOptions = {
   onSet?: SetterHook;
 };
 
+const VALUE = Symbol("Signal.value");
+
 export class Signal<T = any> {
-  static VALUE = Symbol("Signal.value");
+  static VALUE = VALUE;
 
   static proxy2raw = new WeakMap();
   static raw2proxy = new WeakMap();
@@ -132,7 +134,7 @@ export class Signal<T = any> {
   }
 
   // @ts-ignore
-  private [Signal.VALUE]: T;
+  private [VALUE]: T;
 
   private get_hooks = new Set<GetterHook>();
   private set_hooks = new Set<SetterHook>();
@@ -155,21 +157,17 @@ export class Signal<T = any> {
   ) {
     if (options.onGet) this.get_hooks.add(options.onGet);
     if (options.onSet) this.set_hooks.add(options.onSet);
-    this[Signal.VALUE] = initialValue;
+    this[VALUE] = initialValue;
   }
 
   private emit_get(path: HookPath) {
-    this.get_hooks.forEach((hook) => hook(this[Signal.VALUE], path, this));
-    Signal.get_hooks.forEach((hook) => hook(this[Signal.VALUE], path, this));
+    this.get_hooks.forEach((hook) => hook(this[VALUE], path, this));
+    Signal.get_hooks.forEach((hook) => hook(this[VALUE], path, this));
   }
 
   private emit_set(setValue: any, path: HookPath) {
-    this.set_hooks.forEach((hook) =>
-      hook(this[Signal.VALUE], setValue, path, this)
-    );
-    Signal.set_hooks.forEach((hook) =>
-      hook(this[Signal.VALUE], setValue, path, this)
-    );
+    this.set_hooks.forEach((hook) => hook(this[VALUE], setValue, path, this));
+    Signal.set_hooks.forEach((hook) => hook(this[VALUE], setValue, path, this));
   }
 
   /**
@@ -179,7 +177,7 @@ export class Signal<T = any> {
    */
   get value(): T {
     const path = ["value"];
-    const value = this[Signal.VALUE];
+    const value = this[VALUE];
     this.emit_get(path);
     return Signal.toProxy(value, this, path);
   }
@@ -193,11 +191,11 @@ export class Signal<T = any> {
     if (this.close) {
       throw new Error("Signal is closed");
     }
-    if (Object.is(this[Signal.VALUE], newValue)) {
+    if (Object.is(this[VALUE], newValue)) {
       return;
     }
     const path = ["value"];
-    this[Signal.VALUE] = newValue;
+    this[VALUE] = newValue;
     this.emit_set(newValue, path);
   }
 

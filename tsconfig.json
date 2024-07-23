@@ -12,5 +12,13 @@
     "declaration": false,
     "emitDeclarationOnly": false,
     "declarationDir": null
+  },
+  "ts-node": {
+    "transpileOnly": true,
+    "compilerOptions": {
+      "module": "NodeNext",
+      "target": "ESNext",
+      "moduleResolution": "NodeNext"
+    }
   }
 }
