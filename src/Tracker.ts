@@ -1,29 +1,29 @@
 import { Signal } from "./Signal";
 
-export class Tacker {
+export class Tracker {
   static tracking = true;
   static tracking_stack = [] as boolean[];
 
   static pause() {
-    Tacker.tracking_stack.push(Tacker.tracking);
-    Tacker.tracking = false;
+    Tracker.tracking_stack.push(Tracker.tracking);
+    Tracker.tracking = false;
   }
 
   static enable() {
-    Tacker.tracking_stack.push(Tacker.tracking);
-    Tacker.tracking = true;
+    Tracker.tracking_stack.push(Tracker.tracking);
+    Tracker.tracking = true;
   }
 
   static resume() {
-    Tacker.tracking = Tacker.tracking_stack.pop() ?? true;
+    Tracker.tracking = Tracker.tracking_stack.pop() ?? true;
   }
 
   static skip<T>(fn: () => T) {
-    Tacker.pause();
+    Tracker.pause();
     try {
       return fn();
     } finally {
-      Tacker.resume();
+      Tracker.resume();
     }
   }
 
@@ -37,16 +37,16 @@ export class Tacker {
    * @return {T} The result of executing the provided function.
    */
   collect<T>(fn: () => T) {
-    if (!Tacker.tracking) {
+    if (!Tracker.tracking) {
       return fn();
     }
     const unsubscribe = Signal.subscribe({
       getter: (value, path, sig) => {
-        if (!Tacker.tracking) return;
+        if (!Tracker.tracking) return;
         this.dependencies.add(sig);
       },
       setter: (value, setValue, path, sig) => {
-        if (!Tacker.tracking) return;
+        if (!Tracker.tracking) return;
         this.dependents.add(sig);
       },
     });

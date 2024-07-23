@@ -1,4 +1,4 @@
-import { Tacker } from "./Tacker";
+import { Tracker } from "./Tracker";
 import { Signal } from "./Signal";
 
 export class EffectScope {
@@ -59,7 +59,7 @@ export class EffectScope {
 export class Effect<T = any> {
   static active: Effect | undefined;
 
-  private collection = new Tacker();
+  private tracker = new Tracker();
 
   private triggers = new Map<Signal, (...args: any[]) => any>();
 
@@ -87,7 +87,7 @@ export class Effect<T = any> {
     try {
       this.running = true;
       Effect.active = this;
-      const ret = this.collection.collect(() => this.fn());
+      const ret = this.tracker.collect(() => this.fn());
       this.update_triggers();
       this.emit_value(ret);
       return ret;
@@ -98,7 +98,7 @@ export class Effect<T = any> {
   }
 
   private update_triggers() {
-    this.collection.dependencies.forEach((sig) => {
+    this.tracker.dependencies.forEach((sig) => {
       if (this.triggers.has(sig)) return;
       const cb = () => {
         if (EffectScope.active) {
