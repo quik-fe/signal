@@ -59,7 +59,7 @@ export class EffectScope {
 export class Effect<T = any> {
   static active: Effect | undefined;
 
-  private tracker = new Tracker();
+  private tracker = new Tracker(() => Effect.active === this);
 
   private triggers = new Map<Signal, (...args: any[]) => any>();
 
@@ -143,47 +143,6 @@ export class Effect<T = any> {
 
   unsubscribe(listener: (value: T) => void) {
     this.listeners.delete(listener);
-  }
-}
-
-export class EffectSignal<T> {
-  private _sig: Signal<T>;
-  private _value: T;
-  private _eff: Effect;
-
-  private _context: Record<keyof any, any> = {};
-
-  unsubscribe: () => void;
-
-  constructor(
-    memoFn: (next: (data: T) => void, context: Record<keyof any, any>) => void
-  ) {
-    this._sig = new Signal(this._value);
-    this._eff = new Effect(() => memoFn(this.set.bind(this), this._context));
-    this._eff.run();
-  }
-
-  get _id() {
-    return this._sig._id;
-  }
-
-  get value() {
-    return this._sig.value;
-  }
-
-  get signal() {
-    return this._sig;
-  }
-
-  set(data: T) {
-    this._value = data;
-    this._sig.value = data;
-  }
-
-  cleanup() {
-    this._eff.cleanup();
-    this._sig.cleanup();
-    this.unsubscribe();
   }
 }
 

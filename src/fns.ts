@@ -1,4 +1,5 @@
-import { Effect, EffectScope, EffectSignal } from "./Effect";
+import { EffectSignal, MemoFn } from "./EffSignal";
+import { Effect, EffectScope } from "./Effect";
 import { Signal, SignalOptions } from "./Signal";
 
 export function createEffect<T = any>(
@@ -27,6 +28,6 @@ export function createEffectScope<T>(fn: () => T) {
   return new EffectScope().run(fn);
 }
 
-export function createEffectSignal<T>(memoFn: () => T) {
-  return new EffectSignal(memoFn).signal;
+export function createEffectSignal<T>(memoFn: MemoFn<T>) {
+  return new EffectSignal<T>(memoFn);
 }

@@ -30,6 +30,8 @@ export class Tracker {
   dependencies: Set<Signal<any>> = new Set();
   dependents: Set<Signal<any>> = new Set();
 
+  constructor(private enabled?: () => boolean) {}
+
   /**
    * A function that collects dependencies and dependents based on the provided function.
    *
@@ -43,10 +45,12 @@ export class Tracker {
     const unsubscribe = Signal.subscribe({
       getter: (value, path, sig) => {
         if (!Tracker.tracking) return;
+        if (this.enabled && !this.enabled()) return;
         this.dependencies.add(sig);
       },
       setter: (value, setValue, path, sig) => {
         if (!Tracker.tracking) return;
+        if (this.enabled && !this.enabled()) return;
         this.dependents.add(sig);
       },
     });

@@ -175,7 +175,7 @@ export class Signal<T = any> {
    *
    * @return {T} The current value of the signal
    */
-  get value(): T {
+  get(): T {
     const path = ["value"];
     const value = this[VALUE];
     this.emit_get(path);
@@ -183,11 +183,21 @@ export class Signal<T = any> {
   }
 
   /**
-   * Sets the new value for the signal and emits the set event.
+   * Retrieves the current value of the signal and emits the get event.
+   *
+   * @return {T} The current value of the signal
+   */
+  get value(): T {
+    return this.get();
+  }
+
+  /**
+   * Sets a new value for the signal and emits the set event.
    *
    * @param {T} newValue - The new value to set for the signal.
+   * @throws {Error} If the signal is closed.
    */
-  set value(newValue: T) {
+  set(newValue: T) {
     if (this.close) {
       throw new Error("Signal is closed");
     }
@@ -197,6 +207,15 @@ export class Signal<T = any> {
     const path = ["value"];
     this[VALUE] = newValue;
     this.emit_set(newValue, path);
+  }
+
+  /**
+   * Sets the new value for the signal and emits the set event.
+   *
+   * @param {T} newValue - The new value to set for the signal.
+   */
+  set value(newValue: T) {
+    this.set(newValue);
   }
 
   /**
