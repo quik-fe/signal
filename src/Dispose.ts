@@ -1,8 +1,14 @@
 export class Dispose {
   private _abort = new AbortController();
 
+  static nextTick(fn: () => void) {
+    setTimeout(fn, 0);
+  }
+
   dispose() {
-    this._abort.abort();
+    Dispose.nextTick(() => {
+      this._abort.abort();
+    });
   }
 
   onDispose(fn: () => void) {
