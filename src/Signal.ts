@@ -13,6 +13,21 @@ export type SetterHook = (
   sig: Signal<any>
 ) => void;
 
+export type ObservableObserver<T> =
+  | ((v: T) => void)
+  | {
+      next?: (v: T) => void;
+      error?: (v: any) => void;
+      complete?: (v: boolean) => void;
+    };
+export interface Observable<T> {
+  subscribe(observer: ObservableObserver<T>): {
+    unsubscribe(): void;
+  };
+  // @ts-ignore
+  [Symbol.observable](): Observable<T>;
+}
+
 export type SignalOptions = {
   deep?: boolean;
   onGet?: GetterHook;
@@ -331,6 +346,43 @@ export class Signal<T = any> extends Dispose {
   *[Symbol.iterator]() {
     yield () => this.get();
     yield (value) => this.set(value);
+  }
+
+  /**
+   * Converts the Signal to an Observable.
+   *
+   * @return {Observable<T>} The Observable representation of the Signal.
+   * @throws {TypeError} If the observer is not an object or null.
+   */
+  toObservable(): Observable<T> {
+    const that = this;
+    return {
+      subscribe(observer) {
+        if (!(observer instanceof Object) || observer == null) {
+          throw new TypeError("Expected the observer to be an object.");
+        }
+
+        const handler =
+          typeof observer === "function"
+            ? observer
+            : observer.next && observer.next.bind(observer);
+
+        if (!handler) {
+          return { unsubscribe() {} };
+        }
+
+        const unsubscribe = that.subscribe({
+          setter(value) {
+            handler(value);
+          },
+        });
+        return { unsubscribe };
+      },
+      // @ts-ignore
+      [Symbol.observable || "@@observable"]() {
+        return this;
+      },
+    };
   }
 }
 

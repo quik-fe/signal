@@ -7,6 +7,7 @@ import {
   Signal,
   SignalOptions,
 } from "./Signal";
+import { Tracker } from "./Tracker";
 import { WatchEffect } from "./WatchEffect";
 
 export function createEffect<T = any>(
@@ -45,16 +46,31 @@ export function createSignal(
   return signal as any;
 }
 
-export function createEffectScope<T>(fn: () => T) {
-  return new EffectScope().run(fn);
+export function batch<T>(fn: () => T) {
+  const scope = new EffectScope();
+  try {
+    return scope.run(fn);
+  } finally {
+    scope.dispose();
+  }
 }
 
 export function createEffectSignal<T>(memoFn: MemoFn<T>) {
   return new EffectSignal<T>(memoFn);
 }
-
+export function skip<T>(fn: () => T): T {
+  try {
+    Tracker.pause();
+    return fn();
+  } finally {
+    Tracker.resume();
+  }
+}
 export function unref<T>(sig: T): T extends Signal<infer P> ? P : T {
   return sig instanceof Signal ? sig.value : sig;
+}
+export function untrack<T>(fn: () => T): T extends Signal<infer P> ? P : T {
+  return skip(() => unref(fn()));
 }
 export function isRef(sig: any): sig is Signal {
   return sig instanceof Signal;
