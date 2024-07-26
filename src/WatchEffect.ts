@@ -11,24 +11,19 @@ export class WatchEffect<T> extends Effect<T> {
     fn: (value: T, oldValue: T | undefined) => void,
     options?: EffectOptions
   ) {
-    super(
-      () => {
-        this.oldValue = this.value;
-        this.value = watch();
-        return this.value;
-      },
-      {
-        onTrigger: (sig) => {
-          Tracker.pause();
-          try {
-            fn(this.value, this.oldValue);
-            options?.onTrigger?.(sig);
-          } finally {
-            Tracker.resume();
-          }
-        },
+    super(() => {
+      this.oldValue = this.value;
+      this.value = watch();
+      Tracker.pause();
+      try {
+        fn(this.value, this.oldValue);
+      } catch (error) {
+        console.error(error);
+      } finally {
+        Tracker.resume();
       }
-    );
+      return this.value;
+    }, options);
   }
 }
 
