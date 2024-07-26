@@ -27,8 +27,8 @@ export class Tracker {
     }
   }
 
-  dependencies = {} as Record<string, HookPath[]>;
-  dependents = {} as Record<string, HookPath[]>;
+  dependencies = {} as Record<string, Set<string>>;
+  dependents = {} as Record<string, Set<string>>;
 
   constructor(private enabled?: () => boolean) {}
 
@@ -46,14 +46,14 @@ export class Tracker {
       getter: (value, path, sig) => {
         if (!Tracker.tracking) return;
         if (this.enabled && !this.enabled()) return;
-        this.dependencies[sig._id] ||= [];
-        this.dependencies[sig._id].push(path);
+        this.dependencies[sig._id] ||= new Set();
+        this.dependencies[sig._id].add(path.map(String).join("."));
       },
       setter: (value, setValue, path, sig) => {
         if (!Tracker.tracking) return;
         if (this.enabled && !this.enabled()) return;
-        this.dependents[sig._id] ||= [];
-        this.dependents[sig._id].push(path);
+        this.dependents[sig._id] ||= new Set();
+        this.dependents[sig._id].add(path.map(String).join("."));
       },
     });
     try {

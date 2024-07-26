@@ -145,19 +145,16 @@ export class Effect<T = any> extends Dispose {
       if (!sig) return;
       if (this.triggers.has(sig)) return;
       const match = (path: HookPath) => {
-        let target = path;
+        let target = path.map(String).join(".");
         switch (this.mode) {
           case EffectMode.Deep: {
             return true;
           }
           case EffectMode.Value: {
-            target = ["value"];
+            target = "value";
           }
           case EffectMode.Path: {
-            return paths.some(
-              (p) =>
-                target.length === p.length && target.every((x, i) => x === p[i])
-            );
+            return paths.has(target);
           }
         }
       };
