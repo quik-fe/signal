@@ -1,4 +1,4 @@
-import { Signal } from "./Signal";
+import { HookPath, Signal } from "./Signal";
 
 export class Tracker {
   static tracking = true;
@@ -27,8 +27,8 @@ export class Tracker {
     }
   }
 
-  dependencies: Set<Signal<any>> = new Set();
-  dependents: Set<Signal<any>> = new Set();
+  dependencies = {} as Record<string, HookPath[]>;
+  dependents = {} as Record<string, HookPath[]>;
 
   constructor(private enabled?: () => boolean) {}
 
@@ -46,12 +46,14 @@ export class Tracker {
       getter: (value, path, sig) => {
         if (!Tracker.tracking) return;
         if (this.enabled && !this.enabled()) return;
-        this.dependencies.add(sig);
+        this.dependencies[sig._id] ||= [];
+        this.dependencies[sig._id].push(path);
       },
       setter: (value, setValue, path, sig) => {
         if (!Tracker.tracking) return;
         if (this.enabled && !this.enabled()) return;
-        this.dependents.add(sig);
+        this.dependents[sig._id] ||= [];
+        this.dependents[sig._id].push(path);
       },
     });
     try {

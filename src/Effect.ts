@@ -1,19 +1,35 @@
 import { Tracker } from "./Tracker";
-import { Signal } from "./Signal";
+import { HookPath, SetterHook, Signal } from "./Signal";
+import { Record } from "./Record";
+import { Dispose } from "./Dispose";
 
-export class EffectScope {
+export class EffectScope extends Dispose {
   static active: EffectScope | undefined;
 
   private effects: Set<Effect> = new Set();
+  private signals: Set<Signal> = new Set();
 
-  // 当前触发的 effects
-  private trigger_effects: Set<Effect> = new Set();
+  private pending: Set<Effect> = new Set();
+
+  constructor() {
+    super();
+    Record.record(this);
+    const unsubscribe = Record.subscribe((x) => {
+      if (x instanceof Signal) {
+        this.signals.add(x);
+      } else if (x instanceof Effect) {
+        this.effects.add(x);
+      }
+    });
+    this.onDispose(unsubscribe);
+    this.onDispose(this.cleanup.bind(this));
+  }
 
   run<T>(fn: () => T) {
     const last_eff_scope = EffectScope.active;
     try {
       EffectScope.active = this;
-      this.trigger_effects.clear();
+      this.pending.clear();
       return fn();
     } finally {
       this.trigger();
@@ -21,26 +37,22 @@ export class EffectScope {
     }
   }
 
-  record_eff(eff: Effect) {
-    this.effects.add(eff);
+  fire(eff: Effect) {
+    this.pending.add(eff);
   }
 
-  trigger_eff(eff: Effect) {
-    this.trigger_effects.add(eff);
-  }
-
-  trigger() {
-    const effs = Array.from(this.trigger_effects);
+  private trigger() {
+    const effs = Array.from(this.pending);
     const visited = new Set<Effect>();
-    this.trigger_effects.clear();
+    this.pending.clear();
     for (const eff of effs) {
       if (visited.has(eff)) return;
       eff.run();
       visited.add(eff);
-      effs.push(...Array.from(this.trigger_effects));
-      this.trigger_effects.clear();
+      effs.push(...Array.from(this.pending));
+      this.pending.clear();
     }
-    this.trigger_effects.clear();
+    this.pending.clear();
   }
 
   stop() {
@@ -54,9 +66,28 @@ export class EffectScope {
       eff.enable();
     }
   }
+
+  cleanup() {
+    for (const sig of Array.from(this.signals)) {
+      sig.cleanup();
+    }
+    for (const eff of this.effects) {
+      eff.cleanup();
+    }
+  }
 }
 
-export class Effect<T = any> {
+export enum EffectMode {
+  Deep = "deep",
+  Path = "path",
+  Value = "value",
+}
+export type EffectOptions = {
+  onTrigger?: (sig: Signal) => void;
+  mode?: EffectMode;
+};
+
+export class Effect<T = any> extends Dispose {
   static active: Effect | undefined;
 
   private tracker = new Tracker(() => Effect.active === this);
@@ -69,13 +100,24 @@ export class Effect<T = any> {
 
   private listeners = new Set<(value: T) => void>();
 
-  constructor(
-    public fn: () => T,
-    private options?: {
-      onTrigger?: (sig: Signal) => void;
-    }
-  ) {
-    EffectScope.active?.record_eff(this);
+  private subEffs = new Set<Effect>();
+  private subSigs = new Set<Signal>();
+
+  private mode = EffectMode.Path;
+
+  constructor(public fn: () => T, private options?: EffectOptions) {
+    super();
+    this.mode = options?.mode ?? EffectMode.Path;
+    Record.record(this);
+    const unsubscribe = Record.subscribe((x) => {
+      if (x instanceof Signal) {
+        this.subSigs.add(x);
+      } else if (x instanceof Effect) {
+        this.subEffs.add(x);
+      }
+    });
+    this.onDispose(unsubscribe);
+    this.onDispose(this.cleanup.bind(this));
   }
 
   run() {
@@ -88,8 +130,8 @@ export class Effect<T = any> {
       this.running = true;
       Effect.active = this;
       const ret = this.tracker.collect(() => this.fn());
-      this.update_triggers();
-      this.emit_value(ret);
+      this.update();
+      this.emit(ret);
       return ret;
     } finally {
       this.running = false;
@@ -97,12 +139,34 @@ export class Effect<T = any> {
     }
   }
 
-  private update_triggers() {
-    this.tracker.dependencies.forEach((sig) => {
+  private update() {
+    Object.entries(this.tracker.dependencies).forEach(([id, paths]) => {
+      const sig = Signal.signals.get(id);
+      if (!sig) return;
       if (this.triggers.has(sig)) return;
-      const cb = () => {
+      const match = (path: HookPath) => {
+        let target = path;
+        switch (this.mode) {
+          case EffectMode.Deep: {
+            return true;
+          }
+          case EffectMode.Value: {
+            target = ["value"];
+          }
+          case EffectMode.Path: {
+            return paths.some(
+              (p) =>
+                target.length === p.length && target.every((x, i) => x === p[i])
+            );
+          }
+        }
+      };
+      const cb: SetterHook = (v, sv, pth) => {
+        if (!this.enabled) return;
+        if (!match(pth)) return;
+
         if (EffectScope.active) {
-          EffectScope.active.trigger_eff(this);
+          EffectScope.active.fire(this);
         } else {
           this.run();
         }
@@ -114,9 +178,13 @@ export class Effect<T = any> {
     });
   }
 
-  private emit_value(value: T) {
+  private emit(value: T) {
     for (const listener of Array.from(this.listeners)) {
-      listener(value);
+      try {
+        listener(value);
+      } catch (error) {
+        console.error(error);
+      }
     }
   }
 
@@ -124,15 +192,19 @@ export class Effect<T = any> {
     for (const [sig, cb] of Array.from(this.triggers.entries())) {
       sig.unsubscribe(cb);
     }
+    for (const eff of this.subEffs) {
+      eff.dispose();
+    }
+    for (const sig of this.subSigs) {
+      sig.dispose();
+    }
   }
 
   stop() {
-    if (!this.enabled) return;
     this.enabled = false;
   }
 
   enable() {
-    if (this.enabled) return;
     this.enabled = true;
   }
 
@@ -147,30 +219,51 @@ export class Effect<T = any> {
 }
 
 // const main = () => {
-//   const sig1 = new Signal(1);
-//   const sig2 = new EffectSignal((next) => next(sig1.value * 2));
-
-//   console.log(sig1._id);
-//   console.log(sig2._id);
-
-//   const eff = new Effect(
-//     () => {
-//       console.log(sig2.value);
+//   const todos = new Signal([
+//     {
+//       id: 1,
+//       title: "todo 1",
+//       done: true,
 //     },
 //     {
-//       onTrigger: (sig) => console.log(sig._id),
+//       id: 2,
+//       title: "todo 2",
+//       done: false,
+//     },
+//   ]);
+
+//   console.log(todos._id);
+
+//   new Effect(
+//     () => {
+//       const task2 = todos.value[1];
+//       console.log("task2.done: ", task2?.done);
+//     },
+//     {
+//       onTrigger: (sig) => console.log("eff1", sig._id),
 //     }
-//   );
-//   eff.run();
+//   ).run();
 
-//   sig1.value += 1;
-//   sig1.value += 1;
-//   sig1.value += 1;
-//   sig1.value += 1;
+//   new Effect(
+//     () => {
+//       console.log(todos.value);
+//     },
+//     {
+//       onTrigger: (sig) => console.log("eff2", sig._id),
+//     }
+//   ).run();
 
-//   console.log(sig1.value);
+//   todos.value[0].done = false;
+//   todos.value[0].done = true;
+
+//   todos.value[1].done = false;
+//   todos.value[1].done = true;
+
+//   todos.value.push({
+//     id: 3,
+//     title: "todo 3",
+//     done: false,
+//   });
 // };
 
 // main();
-
-// new EffectScope().run(main);

@@ -1,9 +1,12 @@
+import { Dispose } from "./Dispose";
+import { Record } from "./Record";
+
 function isObject<T>(obj: T): obj is T & object {
   return typeof obj === "object" && obj !== null;
 }
-type HookPath = (string | symbol)[];
-type GetterHook = (value: any, path: HookPath, sig: Signal<any>) => void;
-type SetterHook = (
+export type HookPath = (string | symbol)[];
+export type GetterHook = (value: any, path: HookPath, sig: Signal<any>) => void;
+export type SetterHook = (
   value: any,
   setValue: any,
   path: HookPath,
@@ -18,7 +21,7 @@ export type SignalOptions = {
 
 const VALUE = Symbol("Signal.value");
 
-export class Signal<T = any> {
+export class Signal<T = any> extends Dispose {
   static VALUE = VALUE;
 
   static proxy2raw = new WeakMap();
@@ -26,6 +29,8 @@ export class Signal<T = any> {
 
   static get_hooks = new Set<GetterHook>();
   static set_hooks = new Set<SetterHook>();
+
+  static signals = new Map<string, Signal>();
 
   /**
    * Subscribes to changes in the signal by adding getter and setter hooks.
@@ -85,11 +90,11 @@ export class Signal<T = any> {
   /**
    * Retrieves the raw value of a given proxy.
    *
-   * @param {T} proxy - The proxy object.
+   * @param {T extends WeakKey} proxy - The proxy object.
    * @return {T} The raw value of the proxy.
    */
-  static toRaw<T>(proxy: T): T {
-    return this.proxy2raw.get(proxy as any) ?? proxy;
+  static toRaw<T extends WeakKey>(proxy: T): T {
+    return this.proxy2raw.get(proxy) ?? proxy;
   }
 
   /**
@@ -155,17 +160,24 @@ export class Signal<T = any> {
       deep: true,
     }
   ) {
+    super();
     if (options.onGet) this.get_hooks.add(options.onGet);
     if (options.onSet) this.set_hooks.add(options.onSet);
     this[VALUE] = initialValue;
+
+    Record.record(this);
+    this.onDispose(this.cleanup.bind(this));
+
+    Signal.signals.set(this._id, this);
+    this.onDispose(() => Signal.signals.delete(this._id));
   }
 
-  private emit_get(path: HookPath) {
+  protected emit_get(path: HookPath) {
     this.get_hooks.forEach((hook) => hook(this[VALUE], path, this));
     Signal.get_hooks.forEach((hook) => hook(this[VALUE], path, this));
   }
 
-  private emit_set(setValue: any, path: HookPath) {
+  protected emit_set(setValue: any, path: HookPath) {
     this.set_hooks.forEach((hook) => hook(this[VALUE], setValue, path, this));
     Signal.set_hooks.forEach((hook) => hook(this[VALUE], setValue, path, this));
   }
@@ -216,6 +228,14 @@ export class Signal<T = any> {
    */
   set value(newValue: T) {
     this.set(newValue);
+  }
+
+  trigger(path: HookPath = ["value"]) {
+    this.emit_set(this[VALUE], path);
+  }
+
+  dependent(path: HookPath = ["value"]) {
+    this.emit_get(path);
   }
 
   /**
@@ -306,6 +326,56 @@ export class Signal<T = any> {
   cleanup() {
     this.get_hooks.clear();
     this.set_hooks.clear();
+  }
+
+  *[Symbol.iterator]() {
+    yield () => this.get();
+    yield (value) => this.set(value);
+  }
+}
+
+export class ShallowSignal<T = any> extends Signal<T> {
+  protected emit_set(setValue: any, path: HookPath): void {
+    if (path.length !== 1 && path[0] !== "value") return;
+    super.emit_set(setValue, path);
+  }
+}
+
+export type HookSignalFn<T = any> = (
+  track: () => void,
+  trigger: () => void
+) => {
+  get: () => T;
+  set: (value: T) => void;
+};
+
+export class HookSignal<T = any> extends Signal<T> {
+  private hooks: {
+    get: () => T;
+    set: (value: T) => void;
+  };
+
+  constructor(
+    fn: HookSignalFn<T>,
+    options: SignalOptions = {
+      deep: true,
+    }
+  ) {
+    super(null as any, options);
+    this.hooks = fn(
+      () => this.dependent(),
+      () => this.trigger()
+    );
+  }
+
+  get(): T {
+    this.emit_get(["value"]);
+    return this.hooks.get();
+  }
+
+  set(newValue: T): void {
+    this.emit_set(newValue, ["value"]);
+    this.hooks.set(newValue);
   }
 }
 
