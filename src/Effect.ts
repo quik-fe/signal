@@ -11,7 +11,14 @@ export class EffectScope extends Dispose {
 
   private pending: Set<Effect> = new Set();
 
-  constructor() {
+  constructor(
+    private options: {
+      nextTick?: boolean;
+    } = {
+      // next tick triggers effects immediately
+      nextTick: true,
+    }
+  ) {
     super();
     Record.record(this);
     const unsubscribe = Record.subscribe((x) => {
@@ -33,7 +40,13 @@ export class EffectScope extends Dispose {
       this.pending.clear();
       return fn();
     } finally {
-      this.trigger();
+      if (this.options.nextTick) {
+        Dispose.nextTick(() => {
+          this.trigger();
+        });
+      } else {
+        this.trigger();
+      }
       EffectScope.active = last_eff_scope;
     }
   }
@@ -88,6 +101,8 @@ export enum EffectMode {
 export type EffectOptions = {
   onTrigger?: (sig: Signal) => void;
   mode?: EffectMode;
+  // next tick to trigger effects
+  nextTick?: boolean;
 };
 
 export class Effect<T = any> extends Dispose {
@@ -107,10 +122,12 @@ export class Effect<T = any> extends Dispose {
   private subSigs = new Set<Signal>();
 
   private mode = EffectMode.Path;
+  private nextTickTrigger = true;
 
   constructor(public fn: () => T, private options?: EffectOptions) {
     super();
     this.mode = options?.mode ?? EffectMode.Path;
+    this.nextTickTrigger = options?.nextTick ?? true;
     Record.record(this);
     const unsubscribe = Record.subscribe((x) => {
       if (Effect.active !== this) return;
@@ -149,30 +166,34 @@ export class Effect<T = any> extends Dispose {
       if (!sig) return;
       if (this.triggers.has(sig)) return;
       const match = (path: HookPath) => {
-        let target = path.map(String).join(".");
         switch (this.mode) {
           case EffectMode.Deep: {
             return true;
           }
           case EffectMode.Value: {
-            target = "value";
+            return paths.has("value");
           }
           case EffectMode.Path: {
-            return paths.has(target);
+            return paths.has(path.map(String).join("."));
           }
         }
       };
+      const nextTick = this.nextTickTrigger
+        ? Dispose.nextTick
+        : (fn: any) => fn();
       const cb: SetterHook = (v, sv, pth) => {
-        if (!this.enabled) return;
-        if (!match(pth)) return;
+        nextTick(() => {
+          if (!this.enabled) return;
+          if (!match(pth)) return;
 
-        if (EffectScope.active) {
-          EffectScope.active.fire(this);
-        } else {
-          this.run();
-        }
+          if (EffectScope.active) {
+            EffectScope.active.fire(this);
+          } else {
+            this.run();
+          }
 
-        this.options?.onTrigger?.(sig);
+          this.options?.onTrigger?.(sig);
+        });
       };
       sig.subscribe({ setter: cb });
       this.triggers.set(sig, cb);
