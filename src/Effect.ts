@@ -15,6 +15,7 @@ export class EffectScope extends Dispose {
     super();
     Record.record(this);
     const unsubscribe = Record.subscribe((x) => {
+      if (EffectScope.active !== this) return;
       if (x instanceof Signal) {
         this.signals.add(x);
       } else if (x instanceof Effect) {
@@ -71,9 +72,11 @@ export class EffectScope extends Dispose {
     for (const sig of Array.from(this.signals)) {
       sig.cleanup();
     }
+    this.signals.clear();
     for (const eff of this.effects) {
       eff.cleanup();
     }
+    this.effects.clear();
   }
 }
 
@@ -110,6 +113,7 @@ export class Effect<T = any> extends Dispose {
     this.mode = options?.mode ?? EffectMode.Path;
     Record.record(this);
     const unsubscribe = Record.subscribe((x) => {
+      if (Effect.active !== this) return;
       if (x instanceof Signal) {
         this.subSigs.add(x);
       } else if (x instanceof Effect) {

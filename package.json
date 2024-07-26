@@ -1,6 +1,6 @@
 {
   "name": "@quik-fe/signal",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "",
   "source": "src/main.ts",
   "types": "dist/main.d.ts",
