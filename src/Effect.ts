@@ -11,14 +11,7 @@ export class EffectScope extends Dispose {
 
   private pending: Set<Effect> = new Set();
 
-  constructor(
-    private options: {
-      nextTick?: boolean;
-    } = {
-      // next tick triggers effects immediately
-      nextTick: true,
-    }
-  ) {
+  constructor() {
     super();
     Record.record(this);
     const unsubscribe = Record.subscribe((x) => {
@@ -40,13 +33,7 @@ export class EffectScope extends Dispose {
       this.pending.clear();
       return fn();
     } finally {
-      if (this.options.nextTick) {
-        Dispose.nextTick(() => {
-          this.trigger();
-        });
-      } else {
-        this.trigger();
-      }
+      this.trigger();
       EffectScope.active = last_eff_scope;
     }
   }
@@ -101,8 +88,6 @@ export enum EffectMode {
 export type EffectOptions = {
   onTrigger?: (sig: Signal) => void;
   mode?: EffectMode;
-  // next tick to trigger effects
-  nextTick?: boolean;
 };
 
 export class Effect<T = any> extends Dispose {
@@ -122,12 +107,10 @@ export class Effect<T = any> extends Dispose {
   private subSigs = new Set<Signal>();
 
   private mode = EffectMode.Path;
-  private nextTickTrigger = true;
 
   constructor(public fn: () => T, private options?: EffectOptions) {
     super();
     this.mode = options?.mode ?? EffectMode.Path;
-    this.nextTickTrigger = options?.nextTick ?? true;
     Record.record(this);
     const unsubscribe = Record.subscribe((x) => {
       if (Effect.active !== this) return;
@@ -178,22 +161,17 @@ export class Effect<T = any> extends Dispose {
           }
         }
       };
-      const nextTick = this.nextTickTrigger
-        ? Dispose.nextTick
-        : (fn: any) => fn();
       const cb: SetterHook = (v, sv, pth) => {
-        nextTick(() => {
-          if (!this.enabled) return;
-          if (!match(pth)) return;
+        if (!this.enabled) return;
+        if (!match(pth)) return;
 
-          if (EffectScope.active) {
-            EffectScope.active.fire(this);
-          } else {
-            this.run();
-          }
+        if (EffectScope.active) {
+          EffectScope.active.fire(this);
+        } else {
+          this.run();
+        }
 
-          this.options?.onTrigger?.(sig);
-        });
+        this.options?.onTrigger?.(sig);
       };
       sig.subscribe({ setter: cb });
       this.triggers.set(sig, cb);
