@@ -5,3 +5,4 @@ export * from "./EffSignal";
 export * from "./fns";
 export * from "./WatchEffect";
 export * from "./Record";
+export * from "./Dispose";
