@@ -63,21 +63,29 @@ export class Signal<T = any> extends Dispose {
     setter?: SetterHook;
     once?: boolean;
   }) {
+    if (once) {
+      if (getter) {
+        const _getter = getter;
+        getter = (...args) => {
+          _getter(...args);
+          this.get_hooks.delete(getter!);
+        };
+      }
+      if (setter) {
+        const _setter = setter;
+        setter = (...args) => {
+          _setter(...args);
+          this.set_hooks.delete(setter!);
+        };
+      }
+    }
     const unsubscribe = () => {
       if (getter) this.get_hooks.delete(getter);
       if (setter) this.set_hooks.delete(setter);
     };
 
-    if (getter)
-      this.get_hooks.add((...args) => {
-        getter(...args);
-        if (once) unsubscribe();
-      });
-    if (setter)
-      this.set_hooks.add((...args) => {
-        setter(...args);
-        if (once) unsubscribe();
-      });
+    if (getter) this.get_hooks.add(getter);
+    if (setter) this.set_hooks.add(setter);
 
     return unsubscribe;
   }
@@ -269,21 +277,29 @@ export class Signal<T = any> extends Dispose {
     setter?: SetterHook;
     once?: boolean;
   }) {
+    if (once) {
+      if (getter) {
+        const _getter = getter;
+        getter = (...args) => {
+          _getter(...args);
+          this.get_hooks.delete(getter!);
+        };
+      }
+      if (setter) {
+        const _setter = setter;
+        setter = (...args) => {
+          _setter(...args);
+          this.set_hooks.delete(setter!);
+        };
+      }
+    }
     const unsubscribe = () => {
-      if (getter) this.unsubscribe(getter);
-      if (setter) this.unsubscribe(setter);
+      if (getter) this.get_hooks.delete(getter);
+      if (setter) this.set_hooks.delete(setter);
     };
 
-    if (getter)
-      this.get_hooks.add((...args) => {
-        getter(...args);
-        if (once) this.unsubscribe(getter);
-      });
-    if (setter)
-      this.set_hooks.add((...args) => {
-        setter(...args);
-        if (once) this.unsubscribe(setter);
-      });
+    if (getter) this.get_hooks.add(getter);
+    if (setter) this.set_hooks.add(setter);
 
     return unsubscribe;
   }
