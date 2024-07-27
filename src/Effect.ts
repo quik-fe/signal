@@ -11,18 +11,11 @@ export class EffectScope extends Dispose {
 
   private pending: Set<Effect> = new Set();
 
+  private collected = false;
+
   constructor() {
     super();
     Record.record(this);
-    const unsubscribe = Record.subscribe((x) => {
-      if (EffectScope.active !== this) return;
-      if (x instanceof Signal) {
-        this.signals.add(x);
-      } else if (x instanceof Effect) {
-        this.effects.add(x);
-      }
-    });
-    this.onDispose(unsubscribe);
     this.onDispose(this.cleanup.bind(this));
   }
 
@@ -31,10 +24,28 @@ export class EffectScope extends Dispose {
     try {
       EffectScope.active = this;
       this.pending.clear();
-      return fn();
+      if (this.collected) return fn();
+      return this.collect(fn);
     } finally {
       this.trigger();
       EffectScope.active = last_eff_scope;
+    }
+  }
+
+  collect<T>(fn: () => T) {
+    const unsubscribe = Record.subscribe((x) => {
+      if (EffectScope.active !== this) return;
+      if (x instanceof Signal) {
+        this.signals.add(x);
+      } else if (x instanceof Effect) {
+        this.effects.add(x);
+      }
+    });
+    try {
+      return fn();
+    } finally {
+      this.collected = true;
+      unsubscribe();
     }
   }
 
@@ -108,19 +119,12 @@ export class Effect<T = any> extends Dispose {
 
   private mode = EffectMode.Path;
 
+  private collected = false;
+
   constructor(public fn: () => T, private options?: EffectOptions) {
     super();
     this.mode = options?.mode ?? EffectMode.Path;
     Record.record(this);
-    const unsubscribe = Record.subscribe((x) => {
-      if (Effect.active !== this) return;
-      if (x instanceof Signal) {
-        this.subSigs.add(x);
-      } else if (x instanceof Effect) {
-        this.subEffs.add(x);
-      }
-    });
-    this.onDispose(unsubscribe);
     this.onDispose(this.cleanup.bind(this));
   }
 
@@ -133,13 +137,37 @@ export class Effect<T = any> extends Dispose {
     try {
       this.running = true;
       Effect.active = this;
-      const ret = this.tracker.collect(() => this.fn());
+      let ret: any;
+
+      if (this.collected) {
+        ret = this.fn();
+      } else {
+        ret = this.collect();
+      }
+
       this.update();
       this.emit(ret);
-      return ret;
+      return ret as T;
     } finally {
       this.running = false;
       Effect.active = last_eff;
+    }
+  }
+
+  collect() {
+    const unsubscribe = Record.subscribe((x) => {
+      if (Effect.active !== this) return;
+      if (x instanceof Signal) {
+        this.subSigs.add(x);
+      } else if (x instanceof Effect) {
+        this.subEffs.add(x);
+      }
+    });
+    try {
+      return this.tracker.collect(() => this.fn());
+    } finally {
+      this.collected = true;
+      unsubscribe();
     }
   }
 
@@ -176,6 +204,10 @@ export class Effect<T = any> extends Dispose {
       sig.subscribe({ setter: cb });
       this.triggers.set(sig, cb);
     });
+  }
+
+  get hygienic() {
+    return this.triggers.size === 0;
   }
 
   private emit(value: T) {

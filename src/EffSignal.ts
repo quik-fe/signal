@@ -1,4 +1,4 @@
-import { Effect, EffectScope } from "./Effect";
+import { Effect } from "./Effect";
 import { Signal } from "./Signal";
 
 export type MemoFn<T> = (

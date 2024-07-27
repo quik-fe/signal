@@ -58,12 +58,27 @@ export function batch<T>(fn: () => T) {
 export function createEffectSignal<T>(memoFn: MemoFn<T>) {
   return new EffectSignal<T>(memoFn);
 }
-export function skip<T>(fn: () => T): T {
+export function skip<T, ARGS extends any[]>(
+  fn: (...args: ARGS) => T,
+  ...args: ARGS
+): T {
   try {
     Tracker.pause();
-    return fn();
+    return fn(...args);
   } finally {
     Tracker.resume();
+  }
+}
+export function topRun<T>(fn: () => T): T {
+  const activeEff = Effect.active;
+  const activeScope = EffectScope.active;
+  try {
+    Effect.active = undefined;
+    EffectScope.active = undefined;
+    return fn();
+  } finally {
+    EffectScope.active = activeScope;
+    Effect.active = activeEff;
   }
 }
 export function unref<T>(sig: T): T extends Signal<infer P> ? P : T {
