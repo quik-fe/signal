@@ -1,6 +1,4 @@
 import { Effect, EffectOptions } from "./Effect";
-import { Signal } from "./Signal";
-import { Tracker } from "./Tracker";
 
 export class WatchEffect<T> extends Effect<T> {
   oldValue: T;
@@ -14,13 +12,15 @@ export class WatchEffect<T> extends Effect<T> {
     super(() => {
       this.oldValue = this.value;
       this.value = watch();
-      Tracker.pause();
+
+      // stop tracking in this effect
+      Effect.active = undefined;
       try {
         fn(this.value, this.oldValue);
       } catch (error) {
         console.error(error);
       } finally {
-        Tracker.resume();
+        Effect.active = this;
       }
       return this.value;
     }, options);
