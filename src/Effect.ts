@@ -19,20 +19,20 @@ export class EffectScope extends Dispose {
     this.onDispose(this.cleanup.bind(this));
   }
 
-  run<T>(fn: () => T) {
+  run<T, ARGS extends any[]>(fn: (...args: ARGS) => T, ...args: ARGS) {
     const last_eff_scope = EffectScope.active;
     try {
       EffectScope.active = this;
       this.pending.clear();
-      if (this.collected) return fn();
-      return this.collect(fn);
+      if (this.collected) return fn(...args);
+      return this.collect(fn, ...args);
     } finally {
       this.trigger();
       EffectScope.active = last_eff_scope;
     }
   }
 
-  collect<T>(fn: () => T) {
+  collect<T, ARGS extends any[]>(fn: (...args: ARGS) => T, ...args: ARGS) {
     const unsubscribe = Record.subscribe((x) => {
       if (EffectScope.active !== this) return;
       if (x instanceof Signal) {
@@ -42,7 +42,7 @@ export class EffectScope extends Dispose {
       }
     });
     try {
-      return fn();
+      return fn(...args);
     } finally {
       this.collected = true;
       unsubscribe();

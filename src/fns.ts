@@ -46,10 +46,13 @@ export function createSignal(
   return signal as any;
 }
 
-export function batch<T>(fn: () => T) {
+export function batch<T, ARGS extends any[]>(
+  fn: (...args: ARGS) => T,
+  ...args: ARGS
+) {
   const scope = new EffectScope();
   try {
-    return scope.run(fn);
+    return scope.run(fn, ...args);
   } finally {
     scope.dispose();
   }
