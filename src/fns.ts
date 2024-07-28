@@ -201,7 +201,7 @@ isReactive({} as any);
 
 export function toMemo<T>(sig: MaybeRefOrGetter<T>): EffectSignal<T>;
 export function toMemo(sig: any) {
-  return new EffectSignal(() => toValue(sig));
+  return new EffectSignal((next) => next(toValue(sig)));
 }
 
 export function toRaw<T extends WeakKey>(o: T): T {
