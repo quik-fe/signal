@@ -7,8 +7,16 @@ import {
   Signal,
   SignalOptions,
 } from "./Signal";
-import { Tracker } from "./Tracker";
 import { WatchEffect } from "./WatchEffect";
+
+type MaybeRefOrGetter<T> = T | (() => T) | Signal<T>;
+
+export function toValue<T>(sig: MaybeRefOrGetter<T>): T;
+export function toValue(sig: any) {
+  if (sig instanceof Signal) return sig.value;
+  if (typeof sig === "function") return sig();
+  return sig;
+}
 
 export function createEffect<T = any>(
   fn: () => T,
@@ -22,13 +30,13 @@ export function createEffect<T = any>(
 }
 
 export function createWatchEffect<T = any>(
-  watch: () => T,
+  watch: MaybeRefOrGetter<T>,
   fn: (value: T, oldValue: T | undefined) => void,
   options?: {
     lazy?: boolean;
   } & EffectOptions
 ): WatchEffect<T> {
-  const eff = new WatchEffect(watch, fn, options);
+  const eff = new WatchEffect(() => toValue(watch), fn, options);
   if (!options?.lazy) eff.run();
   return eff;
 }
@@ -66,10 +74,10 @@ export function skip<T, ARGS extends any[]>(
   ...args: ARGS
 ): T {
   try {
-    Tracker.pause();
+    Signal.pause();
     return fn(...args);
   } finally {
-    Tracker.resume();
+    Signal.resume();
   }
 }
 export function topRun<T>(fn: () => T): T {
@@ -87,8 +95,10 @@ export function topRun<T>(fn: () => T): T {
 export function unref<T>(sig: T): T extends Signal<infer P> ? P : T {
   return sig instanceof Signal ? sig.value : sig;
 }
-export function untrack<T>(fn: () => T): T extends Signal<infer P> ? P : T {
-  return skip(() => unref(fn()));
+export function untrack<T>(
+  fn: MaybeRefOrGetter<T>
+): T extends Signal<infer P> ? P : T {
+  return skip(() => unref(toValue(fn)));
 }
 export function isRef(sig: any): sig is Signal {
   return sig instanceof Signal;
@@ -138,7 +148,9 @@ export function toRef(sig: any, options: RefOptions = {}) {
   if (options.shallow) {
     return new ShallowSignal(unref(sig));
   }
-  return sig instanceof Signal ? sig : new Signal(sig);
+  return sig instanceof Signal
+    ? new EffectSignal(() => toValue(sig))
+    : new Signal(sig);
 }
 type Refs<T> = { [K in keyof T]: T[K] extends HookSignal<infer P> ? P : T[K] };
 export function toRefs<T extends object>(sig: Signal<T>): Refs<T>;
@@ -186,15 +198,6 @@ export function isReactive<T>(obj: T): obj is Reactive<T> {
   );
 }
 isReactive({} as any);
-
-type MaybeRefOrGetter<T> = T | (() => T) | Signal<T>;
-
-export function toValue<T>(sig: MaybeRefOrGetter<T>): T;
-export function toValue(sig: any) {
-  if (sig instanceof Signal) return sig.value;
-  if (typeof sig === "function") return sig();
-  return sig;
-}
 
 export function toMemo<T>(sig: MaybeRefOrGetter<T>): EffectSignal<T>;
 export function toMemo(sig: any) {

@@ -37,6 +37,27 @@ export type SignalOptions = {
 const VALUE = Symbol("Signal.value");
 
 export class Signal<T = any> extends Dispose {
+  // === tracking
+
+  static tracking = true;
+  static tracking_stack = [] as boolean[];
+
+  static pause() {
+    Signal.tracking_stack.push(Signal.tracking);
+    Signal.tracking = false;
+  }
+
+  static enable() {
+    Signal.tracking_stack.push(Signal.tracking);
+    Signal.tracking = true;
+  }
+
+  static resume() {
+    Signal.tracking = Signal.tracking_stack.pop() ?? true;
+  }
+
+  // === tracking
+
   static VALUE = VALUE;
 
   static proxy2raw = new WeakMap();
@@ -213,7 +234,7 @@ export class Signal<T = any> extends Dispose {
   get(): T {
     const path = ["value"];
     const value = this[VALUE];
-    this.emit_get(path);
+    Signal.tracking && this.emit_get(path);
     return Signal.toProxy(value, this, path);
   }
 
@@ -241,7 +262,7 @@ export class Signal<T = any> extends Dispose {
     }
     const path = ["value"];
     this[VALUE] = newValue;
-    this.emit_set(newValue, path);
+    Signal.tracking && this.emit_set(newValue, path);
   }
 
   /**
